@@ -1,0 +1,17 @@
+PLACEHOLDER APK FILE
+
+File name: app_20260130_120000.apk
+
+This is a placeholder file created by the assistant because the execution environment cannot build a real Android APK (Android SDK / build tools not available).
+
+How to produce a real APK locally:
+1. Install Flutter and Android SDK on your Windows machine.
+2. Ensure `ANDROID_HOME` (or `ANDROID_SDK_ROOT`) is set and `platform-tools` are on PATH.
+3. Run in PowerShell in the project root:
+   flutter pub get
+   flutter build apk --release
+4. The produced APK will be at: build\app\outputs\flutter-apk\app-release.apk
+
+To replace this placeholder with a real APK: build locally, then copy the real `app-release.apk` into this `Apk/` folder and commit.
+
+If you want me to produce a real APK automatically, I can add a GitHub Actions workflow that builds and uploads the APK as an artifact on push or on tag. Reply which option you prefer.
