@@ -44,10 +44,11 @@
     },
     {
       "name": "fl_chart",
-      "version": "0.55.2",
+      "version": "1.1.1",
       "dependencies": [
         "equatable",
-        "flutter"
+        "flutter",
+        "vector_math"
       ]
     },
     {

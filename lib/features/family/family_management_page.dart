@@ -5,13 +5,13 @@ class FamilyManagementPage extends StatelessWidget {
   const FamilyManagementPage({super.key});
 
   void _showInviteDialog(BuildContext context) {
-    final _emailController = TextEditingController();
+    final emailController = TextEditingController();
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Invite family member (mock)'),
         content: TextField(
-          controller: _emailController,
+          controller: emailController,
           keyboardType: TextInputType.emailAddress,
           decoration: const InputDecoration(labelText: 'Email'),
         ),
@@ -19,7 +19,7 @@ class FamilyManagementPage extends StatelessWidget {
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
           FilledButton(
             onPressed: () {
-              final email = _emailController.text.trim();
+              final email = emailController.text.trim();
               Navigator.of(context).pop();
               if (email.isNotEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invitation sent to $email (mock)')));

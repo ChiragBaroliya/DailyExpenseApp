@@ -143,7 +143,7 @@ class DashboardPage extends StatelessWidget {
 
                         return ListTile(
                           title: Text(title),
-                          subtitle: Text('${date.toLocal()}'.split(' ')[0] + ' • $payment'),
+                          subtitle: Text('${'${date.toLocal()}'.split(' ')[0]} • $payment'),
                           trailing: Text('\$${amount.toStringAsFixed(2)}'),
                         );
                       },
