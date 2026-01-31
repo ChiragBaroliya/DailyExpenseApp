@@ -2,11 +2,24 @@ import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../core/services/permission_service.dart';
 
+/// Supported locales for voice recognition
+enum SupportedLocale {
+  englishIndia('en_IN', 'English (India)'),
+  hindiIndia('hi_IN', 'Hindi'),
+  gujaratiIndia('gu_IN', 'Gujarati');
+
+  final String localeCode;
+  final String displayName;
+
+  const SupportedLocale(this.localeCode, this.displayName);
+}
+
 class VoiceToTextService {
   static final VoiceToTextService _instance = VoiceToTextService._internal();
   late stt.SpeechToText _speechToText;
   String _recognizedText = '';
   bool _isListening = false;
+  String _currentLocale = 'en_IN'; // Default to English (India)
 
   factory VoiceToTextService() {
     return _instance;
@@ -18,6 +31,35 @@ class VoiceToTextService {
 
   bool get isListening => _isListening;
   String get recognizedText => _recognizedText;
+  String get currentLocale => _currentLocale;
+
+  /// Get list of supported locales
+  static List<SupportedLocale> getSupportedLocales() {
+    return SupportedLocale.values;
+  }
+
+  /// Set the current locale for speech recognition
+  void setLocale(SupportedLocale locale) {
+    _currentLocale = locale.localeCode;
+    debugPrint('Locale set to: ${locale.displayName} ($_currentLocale)');
+  }
+
+  /// Set locale by locale code string (e.g., 'en_IN', 'hi_IN', 'gu_IN')
+  bool setLocaleByCode(String localeCode) {
+    try {
+      final supportedCodes = SupportedLocale.values.map((e) => e.localeCode).toList();
+      if (!supportedCodes.contains(localeCode)) {
+        debugPrint('Unsupported locale: $localeCode');
+        return false;
+      }
+      _currentLocale = localeCode;
+      debugPrint('Locale set to: $_currentLocale');
+      return true;
+    } catch (e) {
+      debugPrint('Error setting locale: $e');
+      return false;
+    }
+  }
 
   /// Initialize the speech recognizer
   /// Returns true if initialization is successful, false otherwise
@@ -46,10 +88,11 @@ class VoiceToTextService {
     }
   }
 
-  /// Start listening for speech input
+  /// Start listening for speech input with optional locale override
+  /// Defaults to currentLocale if not specified
   /// Returns true if listening started successfully
   Future<bool> startListening({
-    String localeId = 'en_US',
+    String? localeId,
   }) async {
     try {
       if (!_speechToText.isAvailable) {
@@ -65,14 +108,18 @@ class VoiceToTextService {
       _recognizedText = '';
       _isListening = true;
 
+      // Use provided localeId or default to currentLocale
+      final effectiveLocaleId = localeId ?? _currentLocale;
+
       _speechToText.listen(
         onResult: (result) {
           _recognizedText = result.recognizedWords;
-          debugPrint('Recognized: $_recognizedText');
+          debugPrint('Recognized [$effectiveLocaleId]: $_recognizedText');
         },
-        localeId: localeId,
+        localeId: effectiveLocaleId,
       );
 
+      debugPrint('Listening started with locale: $effectiveLocaleId');
       return true;
     } catch (e) {
       debugPrint('Error starting speech recognition: $e');
