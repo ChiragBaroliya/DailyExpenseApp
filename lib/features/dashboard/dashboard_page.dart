@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/providers/expense_provider.dart';
+import '../../presentation/pages/modify_passcode_page.dart';
 // navigation to add expense uses named routes
 // Navigation to expense list uses named routes registered in main.dart
 
@@ -71,6 +73,45 @@ class DashboardPage extends StatelessWidget {
             tooltip: 'Family',
             icon: const Icon(Icons.family_restroom),
             onPressed: () => Navigator.of(context).pushNamed('/family'),
+          ),
+          PopupMenuButton<int>(
+            onSelected: (value) async {
+              if (value == 1) {
+                // Show passcode management
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ModifyPasscodePage()),
+                );
+              } else if (value == 2) {
+                // Logout
+                final auth = context.read<AuthProvider>();
+                await auth.logout();
+                if (context.mounted) {
+                  Navigator.of(context).pushReplacementNamed('/login');
+                }
+              }
+            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem<int>(
+                value: 1,
+                child: Row(
+                  children: [
+                    Icon(Icons.security, size: 20),
+                    SizedBox(width: 12),
+                    Text('Manage Passcode'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<int>(
+                value: 2,
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, size: 20),
+                    SizedBox(width: 12),
+                    Text('Logout'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

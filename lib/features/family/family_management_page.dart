@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/mock/mock_users.dart';
+import '../../core/providers/auth_provider.dart';
+import '../../data/services/family_service.dart';
+import '../../data/models/family_group.dart';
 
 class FamilyManagementPage extends StatelessWidget {
   const FamilyManagementPage({super.key});
@@ -26,6 +30,46 @@ class FamilyManagementPage extends StatelessWidget {
               }
             },
             child: const Text('Send Invite'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCreateFamilyDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create family group'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(labelText: 'Family name'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              Navigator.of(context).pop();
+              if (name.isEmpty) return;
+              final messenger = ScaffoldMessenger.of(context);
+              final auth = Provider.of<AuthProvider>(context, listen: false);
+              final user = auth.currentUser;
+              if (user == null) {
+                messenger.showSnackBar(const SnackBar(content: Text('Not authenticated')));
+                return;
+              }
+              final service = FamilyService();
+              final req = FamilyGroupRequest(name: name, adminUserId: user.id, adminEmail: user.email);
+              try {
+                await service.createFamilyGroup(req);
+                messenger.showSnackBar(const SnackBar(content: Text('Family group created')));
+              } catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text('Failed to create family: $e')));
+              }
+            },
+            child: const Text('Create'),
           ),
         ],
       ),
@@ -62,7 +106,18 @@ class FamilyManagementPage extends StatelessWidget {
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.person_add),
         label: const Text('Invite'),
-        onPressed: () => _showInviteDialog(context),
+        onPressed: () {
+          // Offer both actions: invite member (mock) and create family group
+          showModalBottomSheet<void>(
+            context: context,
+            builder: (context) => SafeArea(
+              child: Wrap(children: [
+                ListTile(leading: const Icon(Icons.person_add), title: const Text('Invite member'), onTap: () { Navigator.of(context).pop(); _showInviteDialog(context); }),
+                ListTile(leading: const Icon(Icons.group_add), title: const Text('Create family group'), onTap: () { Navigator.of(context).pop(); _showCreateFamilyDialog(context); }),
+              ]),
+            ),
+          );
+        },
       ),
     );
   }

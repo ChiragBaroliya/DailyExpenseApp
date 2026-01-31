@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/expense_provider.dart';
+import '../../data/models/expense_request.dart';
+import '../../data/services/voice_to_text_service.dart';
+import '../../data/services/voice_expense_parser.dart';
 
 class AddExpensePage extends StatefulWidget {
   const AddExpensePage({super.key});
@@ -14,10 +17,13 @@ class _AddExpensePageState extends State<AddExpensePage> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
+  final _voiceService = VoiceToTextService();
 
   String _category = 'Food';
   String _paymentMode = 'Cash';
   DateTime _date = DateTime.now();
+  bool _isListening = false;
+  int _listeningDot = 0;
 
   final List<String> _categories = [
     'Food',
@@ -43,6 +49,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
   void dispose() {
     _amountController.dispose();
     _notesController.dispose();
+    _voiceService.dispose();
     super.dispose();
   }
 
@@ -56,7 +63,183 @@ class _AddExpensePageState extends State<AddExpensePage> {
     if (picked != null) setState(() => _date = picked);
   }
 
-  void _save() {
+  void _showListeningDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Voice Input'),
+        content: SizedBox(
+          height: 120,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.mic, size: 48, color: Colors.blue),
+              const SizedBox(height: 16),
+              AnimatedBuilder(
+                animation: AlwaysStoppedAnimation(_listeningDot),
+                builder: (ctx, child) {
+                  return Text(
+                    'Listening${'.' * ((_listeningDot % 4) + 1)}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    _voiceService.cancelListening();
+                    setState(() => _isListening = false);
+                    Navigator.of(ctx).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Voice input cancelled')),
+                    );
+                  },
+                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Cancel'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // Animate listening dots
+    _animateListeningDots();
+  }
+
+  void _animateListeningDots() {
+    if (!_isListening) return;
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted && _isListening) {
+        setState(() => _listeningDot++);
+        _animateListeningDots();
+      }
+    });
+  }
+
+  Future<void> _startVoiceInput() async {
+    try {
+      final initialized = await _voiceService.initialize();
+      if (!initialized) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Speech recognition not available')),
+        );
+        return;
+      }
+
+      setState(() => _isListening = true);
+      final success = await _voiceService.startListening();
+      if (!success) {
+        setState(() => _isListening = false);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to start listening')),
+        );
+        return;
+      }
+
+      // Show listening dialog and start timeout
+      if (!mounted) return;
+      _showListeningDialog();
+      
+      // Timeout after 10 seconds
+      Future.delayed(const Duration(seconds: 10), () {
+        if (_isListening && mounted) {
+          _voiceService.cancelListening();
+          setState(() => _isListening = false);
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Listening timeout - no speech detected')),
+          );
+        }
+      });
+    } catch (e) {
+      setState(() => _isListening = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  Future<void> _stopVoiceInput() async {
+    try {
+      final recognizedText = await _voiceService.stopListening();
+      setState(() => _isListening = false);
+      
+      // Close listening dialog
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      
+      if (recognizedText.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No speech recognized. Please try again.')),
+        );
+        return;
+      }
+      
+      // Parse voice input using VoiceExpenseParser
+      final parsed = VoiceExpenseParser.parseVoiceExpense(recognizedText);
+      
+      // Autofill form fields
+      if (parsed['amount'] != null) {
+        _amountController.text = parsed['amount'].toString();
+      }
+      
+      // Update category if valid
+      if (parsed['category'] != null && 
+          _categories.contains(parsed['category'])) {
+        setState(() => _category = parsed['category']);
+      }
+      
+      // Update payment mode if valid
+      if (parsed['paymentMode'] != null && 
+          _paymentModes.contains(parsed['paymentMode'])) {
+        setState(() => _paymentMode = parsed['paymentMode']);
+      }
+      
+      // Append notes
+      if (parsed['notes'] != null && 
+          (parsed['notes'] as String).isNotEmpty) {
+        final currentNotes = _notesController.text.trim();
+        final newNotes = currentNotes.isEmpty 
+          ? parsed['notes'] 
+          : '$currentNotes ${parsed['notes']}';
+        _notesController.text = newNotes;
+      }
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Voice input parsed and autofilled'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      setState(() => _isListening = false);
+      
+      // Close listening dialog if open
+      if (mounted && Navigator.of(context).canPop()) {
+        try {
+          Navigator.of(context).pop();
+        } catch (_) {}
+      }
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
     final amount = double.tryParse(_amountController.text.replaceAll(',', '')) ?? 0.0;
@@ -64,20 +247,25 @@ class _AddExpensePageState extends State<AddExpensePage> {
 
     final userId = context.read<AuthProvider>().currentUser?.id ?? 'admin_1';
 
-    final newExpense = {
-      'id': 'e${DateTime.now().millisecondsSinceEpoch}',
-      'title': notes.isNotEmpty ? notes : _category,
-      'amount': amount,
-      'category': _category,
-      'date': _date.toIso8601String().split('T')[0],
-      'paymentMode': _paymentMode,
-      'userId': userId,
-    };
+    final req = ExpenseRequest(
+      amount: amount,
+      category: _category,
+      paymentMode: _paymentMode,
+      date: _date.toUtc().toIso8601String(),
+      notes: notes.isNotEmpty ? notes : null,
+      createdBy: userId,
+      familyGroupId: 'family_1',
+    );
 
-    // Add via provider so state updates are propagated
-    context.read<ExpenseProvider>().addExpense(newExpense);
-
-    Navigator.of(context).pop();
+    try {
+      await context.read<ExpenseProvider>().addExpense(req);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Expense added')));
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to add expense: $e')));
+    }
   }
 
   @override
@@ -133,10 +321,35 @@ class _AddExpensePageState extends State<AddExpensePage> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _notesController,
-                      decoration: const InputDecoration(labelText: 'Notes (optional)', prefixIcon: Icon(Icons.note)),
-                      maxLines: 2,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _notesController,
+                            decoration: const InputDecoration(
+                              labelText: 'Notes (optional)',
+                              prefixIcon: Icon(Icons.note),
+                            ),
+                            maxLines: 2,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0, top: 8.0),
+                          child: Column(
+                            children: [
+                              FloatingActionButton.small(
+                                onPressed: _isListening ? _stopVoiceInput : _startVoiceInput,
+                                backgroundColor: _isListening ? Colors.orange : Colors.blue,
+                                tooltip: _isListening ? 'Stop listening' : 'Start voice input',
+                                child: Icon(
+                                  _isListening ? Icons.stop : Icons.mic,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     FilledButton.icon(

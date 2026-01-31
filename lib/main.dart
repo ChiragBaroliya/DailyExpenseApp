@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'presentation/pages/login_page.dart';
+import 'presentation/pages/register_page.dart';
+import 'core/navigation/app_navigator.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/providers/expense_provider.dart';
 import 'features/expense/add_expense_page.dart';
@@ -24,6 +26,7 @@ class DailyExpenseApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
       ],
       child: MaterialApp(
+        navigatorKey: appNavigatorKey,
         title: 'Daily Expense App',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
@@ -34,6 +37,7 @@ class DailyExpenseApp extends StatelessWidget {
         initialRoute: '/',
         routes: {
           '/': (_) => const LoginPage(),
+          '/register': (_) => const RegisterPage(),
           '/dashboard': (_) => const DashboardPage(),
           '/add_expense': (_) => const AddExpensePage(),
           '/expenses': (_) => const ExpenseListScreen(),

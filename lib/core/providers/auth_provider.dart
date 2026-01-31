@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../../models/user.dart';
-import '../mock/mock_users.dart';
+import '../../data/models/login_request.dart';
+import '../../data/services/auth_service.dart';
+import '../../data/models/login_response.dart';
+import '../network/api_client.dart';
 
 class AuthProvider extends ChangeNotifier {
   User? _currentUser;
   bool _loading = false;
   String? _error;
+  final AuthService _authService;
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+
+  AuthProvider({AuthService? authService}) : _authService = authService ?? AuthService();
 
   User? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
@@ -16,42 +25,44 @@ class AuthProvider extends ChangeNotifier {
     _loading = true;
     _error = null;
     notifyListeners();
-
-    // Simulate a short delay as if checking credentials
-    await Future.delayed(const Duration(milliseconds: 300));
-
     try {
-      final match = mockUsers.firstWhere(
-        (u) => (u['email'] as String).toLowerCase() == email.toLowerCase() && (u['password'] as String) == password,
-        orElse: () => {},
+      final req = LoginRequest(email: email.trim(), password: password);
+      final LoginResponse resp = await _authService.login(req);
+
+      // save token securely
+      await _storage.write(key: 'auth_token', value: resp.token);
+      // save family group id for later APIs
+      await _storage.write(key: 'family_group_id', value: resp.familyGroupId);
+
+      // create a simple current user record. The login response doesn't include
+      // full profile fields expected by `User`, so fill with sensible defaults.
+      _currentUser = User(
+        id: resp.userId,
+        email: resp.email,
+        firstName: '',
+        role: 'user',
       );
 
-      if (match.isNotEmpty) {
-        _currentUser = User(
-          id: match['id'] as String,
-          email: match['email'] as String,
-          firstName: (match['name'] as String),
-          role: match['role'] as String,
-        );
-        _loading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _error = 'Invalid credentials';
-        _loading = false;
-        notifyListeners();
-        return false;
-      }
+      _loading = false;
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      _error = e.message;
+      _loading = false;
+      notifyListeners();
+      return false;
     } catch (e) {
-      _error = 'Login failed';
+      _error = e.toString();
       _loading = false;
       notifyListeners();
       return false;
     }
   }
 
-  void logout() {
+  Future<void> logout() async {
     _currentUser = null;
+    await _storage.delete(key: 'auth_token');
+    await _storage.delete(key: 'family_group_id');
     notifyListeners();
   }
 }
